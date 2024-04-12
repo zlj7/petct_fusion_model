@@ -1,0 +1,10 @@
+output/
+output/*
+output_fold/
+output_fold/*
+runs/
+runs/*
+wandb/
+wandb/*
+**/__pycache__/
+**/__pycache__/*
