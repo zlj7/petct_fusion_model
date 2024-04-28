@@ -14,9 +14,9 @@ matplotlib.use('Agg')
 
 # from models.tiof import ThreeInOne,Args
 # from models.ct_img import ThreeInOne,Args
-from models.resnet_3channel import Resnet, Resnet_orin, Args
-from models.srescnn import srescnn
-from models.nc_3channel import ThreeInOne
+# from models.resnet_3channel import Resnet, Resnet_orin
+# from models.srescnn import srescnn
+from models.nc_3channel import ThreeInOne, Args
 from dataset.nc_dataset import petct_dataset
 from preprocess.channel3_img_dataset import petct_dataset as infer_dataset
 import wandb
@@ -37,7 +37,7 @@ def set_seed(seed):
     np.random.seed(seed)
     random.seed(seed)
 
-set_seed(712)  # 你可以选择任何你喜欢的数字作为种子
+set_seed(712)  
 
 epoches = 100
 
@@ -56,28 +56,30 @@ def initialize_weights(model):
 def train(net, train_dataloader, optimizer):
     net.train()
     predict_list, tgt_list = [], []
+    predict_proba_list = []
     loss_t = 0.
     for batch_idx, item in enumerate(train_dataloader):
         channel_3_img = item['channel_3_img'].float().cuda()
-        # bs = len(channel_3_img)
         label = item['label'].squeeze()
-        # label = torch.full((bs,), label_value.item())
         label = label.cuda()
         pred = net(channel_3_img)
-        # avg_pred = pred.mean(dim=0, keepdim=True) #求平均
-        # print(f'pred:{pred.shape}')
-        # print(f'label:{label.shape}')
         loss = nn.CrossEntropyLoss()(pred, label)
         loss_t += loss.item()
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        predict_list += list(pred.data.max(1)[1].cpu().numpy())
+        predict_proba_list += [pred.data.cpu().numpy()]  # 选择所有类别的概率
         tgt_list += list(label.cpu().numpy())
-        
     
+    predict_proba_list = np.concatenate(predict_proba_list, axis=0)
+    # print(predict_proba_list.shape)
+    # 将概率列表转换为类别预测
+    predict_list = np.argmax(predict_proba_list, axis=1)
+
+    # 计算各项指标
     acc = metrics.accuracy_score(tgt_list, predict_list)
     return acc, loss_t/len(train_dataloader)
+
 
 best_loss = 1e9
 best_auc = 0.
@@ -102,20 +104,37 @@ def valid(net, val_dataloader, save_path):
             for W in net.parameters():
                 l2_reg = W.norm(2)
                 l2_loss += l2_reg
-            predict_proba_list += list(pred.data[:, 1].cpu().numpy())  # 选择正类的概率
+            softmax = nn.Softmax(dim=1)
+            probas = softmax(pred).data.cpu().numpy()
+            predict_proba_list += [probas]  # 选择所有类别的概率
             tgt_list += list(label.cpu().numpy())
 
-    acc = metrics.accuracy_score(tgt_list, [1 if x > 0.5 else 0 for x in predict_proba_list])
-    precision = metrics.precision_score(tgt_list, [1 if x > 0.5 else 0 for x in predict_proba_list])
-    recall = metrics.recall_score(tgt_list, [1 if x > 0.5 else 0 for x in predict_proba_list])
-    f1_score = metrics.f1_score(tgt_list, [1 if x > 0.5 else 0 for x in predict_proba_list])
-    auc = metrics.roc_auc_score(tgt_list, predict_proba_list)  # 使用概率分数计算 AUC
+    predict_proba_list = np.concatenate(predict_proba_list, axis=0)
+    # print(predict_proba_list.shape)
+    # 将概率列表转换为类别预测
+    predict_list = np.argmax(predict_proba_list, axis=1)
+
+    # 计算各项指标
+    acc = metrics.accuracy_score(tgt_list, predict_list)
+    precision = metrics.precision_score(tgt_list, predict_list, average='macro')
+    recall = metrics.recall_score(tgt_list, predict_list, average='macro')
+    f1_score = metrics.f1_score(tgt_list, predict_list, average='macro')
+
+    # 对于多分类AUC，需要使用一对多或一对一的方法
+    # 假设你有4个类别
+    # labels = list(range(4))
+    # auc = metrics.roc_auc_score(tgt_list, predict_proba_list, multi_class='ovo', labels=labels)
+    num_classes = len(np.unique(tgt_list))
+    # if num_classes == 2:
+    auc = metrics.roc_auc_score(tgt_list, predict_proba_list[:, 1])
+    # # else:
+    # labels = list(range(4))
+    # # print(tgt_list)
+    # # print(predict_proba_list)
+    # auc = metrics.roc_auc_score(tgt_list, predict_proba_list, multi_class='ovo', labels=labels)
+
     if not os.path.exists(save_path):
         os.makedirs(save_path)
-    # with open(f'{save_path}tgt_list.txt', 'w') as f:
-    #     print(tgt_list, file=f)
-    # with open(f'{save_path}predict_proba_list.txt', 'w') as f:
-    #     print(predict_proba_list, file=f)
     with open(f'{save_path}auc.txt', 'a') as f:
         print(auc, file=f)
     print(f"auc: {auc}")
@@ -135,8 +154,10 @@ def valid(net, val_dataloader, save_path):
     # 如果30个epoch都没有提升，就停止训练
     if no_improve >= 30:
         print("Early stopping")
-        print(f'best_auc: {best_auc}')
-        print(f'best_f1: {best_f1}')
+        with open(f'{save_path}best_result.txt', 'w') as f:
+
+            print(f'best_auc: {best_auc}', file=f)
+            print(f'best_f1: {best_f1}', file=f)
         exit()
 
     return acc, precision, recall, f1_score, auc, loss_t/len(val_dataloader), l2_loss/len(val_dataloader)
@@ -162,10 +183,10 @@ def valid_infer(net, val_dataloader, save_path):
             tgt_list += list(label_value.cpu().numpy())
 
     acc = metrics.accuracy_score(tgt_list, [1 if x > 0.5 else 0 for x in predict_proba_list])
-    precision = metrics.precision_score(tgt_list, [1 if x > 0.5 else 0 for x in predict_proba_list])
-    recall = metrics.recall_score(tgt_list, [1 if x > 0.5 else 0 for x in predict_proba_list])
-    f1_score = metrics.f1_score(tgt_list, [1 if x > 0.5 else 0 for x in predict_proba_list])
-    auc = metrics.roc_auc_score(tgt_list, predict_proba_list)  # 使用概率分数计算 AUC
+    precision = metrics.precision_score(tgt_list, [1 if x > 0.5 else 0 for x in predict_proba_list], average='macro')
+    recall = metrics.recall_score(tgt_list, [1 if x > 0.5 else 0 for x in predict_proba_list], average='macro')
+    f1_score = metrics.f1_score(tgt_list, [1 if x > 0.5 else 0 for x in predict_proba_list], average='macro')
+    auc = metrics.roc_auc_score(tgt_list, predict_proba_list, multi_class='ovo')  # 使用概率分数计算 AUC
     with open(f'{save_path}predict_proba_list.txt', 'w') as f:
         print(predict_proba_list, file=f)
     with open(f'{save_path}pred.txt', 'w') as f:
@@ -189,26 +210,57 @@ def save_fig(save_path, curve, title):
     plt.savefig(f'{save_path}{title}.png')  # 保存准确率曲线图像
 
 if __name__ == '__main__':
+    fold = 5
     # 使用文件列表初始化数据集
-    # train_ct_files = ['sh_pu_ct_train.npy']
-    # train_pet_files = ['sh_pu_pet_train.npy']
-    # train_fuse_files = ['sh_pu_fuse_train.npy']
-    # train_labels_files = ['sh_pu_label_train.npy']
+    train_ct_files = ['sh_pu_ct_train_30.npy']
+    train_pet_files = ['sh_pu_pet_train_30.npy']
+    train_fuse_files = ['sh_pu_fuse_train_30.npy']
+    train_labels_files = ['sh_pu_label_train_30.npy']
 
-    # test_ct_files = ['sh_pu_ct_test.npy']
-    # test_pet_files = ['sh_pu_pet_test.npy']
-    # test_fuse_files = ['sh_pu_fuse_test.npy']
-    # test_labels_files = ['sh_pu_label_test.npy']
+    test_ct_files = ['sh_pu_ct_test_30.npy']
+    test_pet_files = ['sh_pu_pet_test_30.npy']
+    test_fuse_files = ['sh_pu_fuse_test_30.npy']
+    test_labels_files = ['sh_pu_label_test_30.npy']
 
-    train_ct_files = ['sh_pu_ct_train_30_fold_5.npy']
-    train_pet_files = ['sh_pu_pet_train_30_fold_5.npy']
-    train_fuse_files = ['sh_pu_fuse_train_30_fold_5.npy']
-    train_labels_files = ['sh_pu_label_train_30_fold_5.npy']
+    # train_ct_files = [f'sh_pu_ct_train_50_fold_{fold}.npy']
+    # train_pet_files = [f'sh_pu_pet_train_50_fold_{fold}.npy']
+    # train_fuse_files = [f'sh_pu_fuse_train_50_fold_{fold}.npy']
+    # train_labels_files = [f'sh_pu_label_train_50_fold_{fold}.npy']
 
-    test_ct_files = ['sh_pu_ct_test_30_fold_5.npy']
-    test_pet_files = ['sh_pu_pet_test_30_fold_5.npy']
-    test_fuse_files = ['sh_pu_fuse_test_30_fold_5.npy']
-    test_labels_files = ['sh_pu_label_test_30_fold_5.npy']
+    # test_ct_files = [f'sh_pu_ct_test_50_fold_{fold}.npy']
+    # test_pet_files = [f'sh_pu_pet_test_50_fold_{fold}.npy']
+    # test_fuse_files = [f'sh_pu_fuse_test_50_fold_{fold}.npy']
+    # test_labels_files = [f'sh_pu_label_test_50_fold_{fold}.npy']
+
+    # train_ct_files = [f'sh_pu_ct_train_50_2cls_lungmate.npy']
+    # train_pet_files = [f'sh_pu_pet_train_50_2cls_lungmate.npy']
+    # train_fuse_files = [f'sh_pu_fuse_train_50_2cls_lungmate.npy']
+    # train_labels_files = [f'sh_pu_label_train_50_2cls_lungmate.npy']
+
+    # test_ct_files = [f'sh_pu_ct_test_50_2cls_lungmate.npy']
+    # test_pet_files = [f'sh_pu_pet_test_50_2cls_lungmate.npy']
+    # test_fuse_files = [f'sh_pu_fuse_test_50_2cls_lungmate.npy']
+    # test_labels_files = [f'sh_pu_label_test_50_2cls_lungmate.npy']
+
+    # train_ct_files = [f'sh_pu_ct_train_30_2cls_lungmate.npy']
+    # train_pet_files = [f'sh_pu_pet_train_30_2cls_lungmate.npy']
+    # train_fuse_files = [f'sh_pu_fuse_train_30_2cls_lungmate.npy']
+    # train_labels_files = [f'sh_pu_label_train_30_2cls_lungmate.npy']
+
+    # test_ct_files = [f'sh_pu_ct_test_30_2cls_lungmate.npy']
+    # test_pet_files = [f'sh_pu_pet_test_30_2cls_lungmate.npy']
+    # test_fuse_files = [f'sh_pu_fuse_test_30_2cls_lungmate.npy']
+    # test_labels_files = [f'sh_pu_label_test_30_2cls_lungmate.npy']
+
+    # train_ct_files = [f'sh_pu_ct_train_30_4cls_fold_{fold}.npy']
+    # train_pet_files = [f'sh_pu_pet_train_30_4cls_fold_{fold}.npy']
+    # train_fuse_files = [f'sh_pu_fuse_train_30_4cls_fold_{fold}.npy']
+    # train_labels_files = [f'sh_pu_label_train_30_4cls_fold_{fold}.npy']
+
+    # test_ct_files = [f'sh_pu_ct_test_30_4cls_fold_{fold}.npy']
+    # test_pet_files = [f'sh_pu_pet_test_30_4cls_fold_{fold}.npy']
+    # test_fuse_files = [f'sh_pu_fuse_test_30_4cls_fold_{fold}.npy']
+    # test_labels_files = [f'sh_pu_label_test_30_4cls_fold_{fold}.npy']
     
     # train_ct_files = ['hebeixptrainct2_64.npy', 'sphxptrainct2_64.npy']
     # train_pet_files = ['hebeixptrainpet2_64.npy', 'sphxptrainpet2_64.npy']
@@ -225,29 +277,38 @@ if __name__ == '__main__':
     train_load = torch.utils.data.DataLoader(dataset, batch_size=8, shuffle=True, num_workers=4,
                                                 drop_last=True)
 
-    test_dataset = petct_dataset(test_ct_files, test_pet_files, test_fuse_files, test_labels_files,train=False)
+    for batch_idx, item in enumerate(train_load):
+        ct_mean = item['ct_mean']
+        ct_std = item['ct_std']
+        pet_mean = item['pet_mean']
+        pet_std = item['pet_std']
+        fuse_mean = item['fuse_mean']
+        fuse_std = item['fuse_std']
+        channel_mean = item['channel_mean']
+        channel_std = item['channel_std']
+        break
+    
+    test_dataset = petct_dataset(test_ct_files, test_pet_files, test_fuse_files, test_labels_files, ct_mean[0], ct_std[0], pet_mean[0], pet_std[0], fuse_mean[0], fuse_std[0], channel_mean[0], channel_std[0],train=False)
     print(len(test_dataset))
     test_load = torch.utils.data.DataLoader(test_dataset, batch_size=8, shuffle=True, num_workers=4,
                                                 drop_last=True)
     
-    infer_dataset = infer_dataset('preprocess/test_5.txt', 'test_dataset')
+    infer_dataset = infer_dataset(ct_mean[0], ct_std[0], pet_mean[0], pet_std[0], fuse_mean[0], fuse_std[0], channel_mean[0], channel_std[0], f'preprocess/test_{fold}.txt', 'test_dataset', transform=None, alpha=0.5)
     infer_load = torch.utils.data.DataLoader(infer_dataset, batch_size=1, shuffle=True, num_workers=4,
                                              drop_last=True)
 
-    save_path = "output_fold/patient_tiof_30/fold_5/"
+    # save_path = f"output_fold/tiof_50_2cls/fold_{fold}/"
+    save_path = f"output_fold/tiof_30_2cls/test/"
     args = Args()
-    # net = Resnet(args).cuda()
-    # net = srescnn().cuda()
+    # net = srescnn(num_classes=4).cuda()
     net = ThreeInOne(args).cuda()
-    # net = models.resnet50(pretrained=True)
-    # # for param in net.parameters():
-    # #     param.requires_grad = False
+    # net = models.resnet50(pretrained=False)
     # # 然后重新定义最后一层
     # net.fc = nn.Linear(net.fc.in_features, 2)  
     # net = net.cuda()
     # initialize_weights(net)
-    if use_wandb:
-        wandb.watch(net, log='all')
+    # if use_wandb:
+    #     wandb.watch(net, log='all')
     optim = torch.optim.Adam(filter(lambda p: p.requires_grad, net.parameters()), lr=1e-4,
                                           betas=(0.9, 0.999), weight_decay=weight_decay)
     # 创建学习率调度器
@@ -310,24 +371,25 @@ if __name__ == '__main__':
         save_fig(save_path, auc_curve, "auc")
         save_fig(save_path, l2_loss_curve, "l2_loss")
 
-        test_acc, precision, recall, f1_score, auc, test_loss = valid_infer(net, infer_load, save_path)
-        infer_test_acc_curve.append(test_acc)
-        infer_precision_curve.append(precision)
-        infer_recall_curve.append(recall)
-        infer_f1_score_curve.append(f1_score)
-        infer_auc_curve.append(auc)
-        infer_test_loss_curve.append(test_loss)
+        # test_acc, precision, recall, f1_score, auc, test_loss = valid_infer(net, infer_load, save_path)
+        # infer_test_acc_curve.append(test_acc)
+        # infer_precision_curve.append(precision)
+        # infer_recall_curve.append(recall)
+        # infer_f1_score_curve.append(f1_score)
+        # infer_auc_curve.append(auc)
+        # infer_test_loss_curve.append(test_loss)
 
-        # 绘制曲线
-        save_fig(save_path, infer_test_loss_curve, "patient_test_loss")
-        save_fig(save_path, infer_test_acc_curve, "patient_test_accuracy")
-        save_fig(save_path, infer_precision_curve, "patient_precision")
-        save_fig(save_path, infer_recall_curve, "patient_recall")
-        save_fig(save_path, infer_f1_score_curve, "patient_f1_score")
-        save_fig(save_path, infer_auc_curve, "patient_auc")
+        # # 绘制曲线
+        # save_fig(save_path, infer_test_loss_curve, "patient_test_loss")
+        # save_fig(save_path, infer_test_acc_curve, "patient_test_accuracy")
+        # save_fig(save_path, infer_precision_curve, "patient_precision")
+        # save_fig(save_path, infer_recall_curve, "patient_recall")
+        # save_fig(save_path, infer_f1_score_curve, "patient_f1_score")
+        # save_fig(save_path, infer_auc_curve, "patient_auc")
 
 
 
         print(f"epoch {epoch} finished!")
-    print(f'best_auc: {best_auc}')
-    print(f'best_f1: {best_f1}')
+    with open(f'{save_path}best_result.txt', 'w') as f:
+        print(f'best_auc: {best_auc}', file=f)
+        print(f'best_f1: {best_f1}', file=f)

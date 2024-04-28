@@ -129,9 +129,6 @@ class TRANS_SE_BLOCK(nn.Module):
 
 
 
-        # 2022-4-18
-        # self.spatial_block = spatial_block(channel_num)
-        # self.channel_block = channel_block(channel=channel_num, spatial_dim=spatial_dim)
         self.squeeze = nn.Sequential(
             nn.Conv2d(in_channels=channel_num, out_channels=channel_out, kernel_size=(3, 3), padding=(1, 1)),
             nn.BatchNorm2d(channel_out),

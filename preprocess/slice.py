@@ -16,7 +16,8 @@ def process_images(ct, ct_mask, pet, pet_mask, filename, save_path):
         ct_x, ct_y, ct_w, ct_h = cv2.boundingRect(ct_mask_slice)
         pet_x, pet_y, pet_w, pet_h = cv2.boundingRect(pet_mask_slice)
 
-        if(ct_w * ct_h < 0.3 * ((ct_w + 20) * (ct_h +20)) or pet_w * pet_h < 0.3 * ((pet_w + 20) * (pet_h +20))):
+        # if(ct_w * ct_h < 0.3 * ((ct_w + 20) * (ct_h +20)) or pet_w * pet_h < 0.3 * ((pet_w + 20) * (pet_h +20))):
+        if(ct_w * ct_h < 50 or pet_w * pet_h < 50):
             continue
 
         # 扩展矩形的宽高
@@ -97,5 +98,5 @@ for filename in os.listdir(path):
     # print(f"pet_mask:{pet_mask.shape}")
 
     # print(type(ct_mask))
-    process_images(ct_img, ct_mask, pet_img, pet_mask, name[0], "/data3/share/Shanghai_Pulmonary/sliced_img_30/")
+    process_images(ct_img, ct_mask, pet_img, pet_mask, name[0], "/data3/share/Shanghai_Pulmonary/sliced_img_50pix/")
     print(f"Finish processing {name[0]}!")

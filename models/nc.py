@@ -294,7 +294,7 @@ class ThreeInOne(nn.Module):
 
 class Args():
     def __init__(self):
-        self.num_classes = 2
+        self.num_classes = 4
 
 
 if __name__ == '__main__':

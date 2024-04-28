@@ -3,11 +3,7 @@ import torch
 from torch.utils.data import Dataset
 import torchvision.transforms as transforms
 
-def z_score_normalization(x):
-    mean = torch.mean(x)
-    std = torch.std(x)
-    print(f'mean:{mean}')
-    print(f'std:{std}')
+def z_score_normalization(x, mean, std):
     x_normalized = (x - mean) / std
     return x_normalized
 
@@ -20,7 +16,7 @@ transform = transforms.Compose([
 ])
 
 class petct_dataset(Dataset):
-    def __init__(self, train_ct_files, train_pet_files, train_fuse_files, train_labels_files, train=True):
+    def __init__(self, train_ct_files, train_pet_files, train_fuse_files, train_labels_files, ct_mean=None, ct_std=None, pet_mean=None, pet_std=None, fuse_mean=None, fuse_std=None, channel_mean=None, channel_std=None, train=True):
         # 初始化空列表以存储图像和标签
         ct_list = []
         pet_list = []
@@ -42,7 +38,7 @@ class petct_dataset(Dataset):
             # pet_list.append(load_and_resize(f'/data3/share/Shanghai_Pulmonary/NCdata/{pet_file}'))
             # fuse_list.append(load_and_resize(f'/data3/share/Shanghai_Pulmonary/NCdata/{fuse_file}'))
             # labels_list.append(load_and_resize(f'/data3/share/Shanghai_Pulmonary/NCdata/{lbl_file}'))
-
+            
         # 将所有图像和标签堆叠在一起
         self.ct = np.concatenate(ct_list, axis=0)
         # print(self.ct.shape)
@@ -62,11 +58,32 @@ class petct_dataset(Dataset):
         self.channel_3_img = torch.from_numpy(self.channel_3_img).float()
         self.labels = torch.from_numpy(self.labels).long()
 
-        self.ct = z_score_normalization(self.ct)
-        self.pet = z_score_normalization(self.pet)
-        self.fuse = z_score_normalization(self.fuse)
-        self.channel_3_img = z_score_normalization(self.channel_3_img)
+        if train:
+            self.ct_mean = torch.mean(self.ct)
+            self.ct_std = torch.std(self.ct)
+            self.pet_mean = torch.mean(self.pet)
+            self.pet_std = torch.std(self.pet)
+            self.fuse_mean = torch.mean(self.fuse)
+            self.fuse_std = torch.std(self.fuse)
+            self.channel_mean = torch.mean(self.channel_3_img)
+            self.channel_std = torch.std(self.channel_3_img)
+        else:
+            self.ct_mean = ct_mean
+            self.ct_std = ct_std
+            self.pet_mean = pet_mean
+            self.pet_std = pet_std
+            self.fuse_mean = fuse_mean
+            self.fuse_std = fuse_std
+            self.channel_mean = channel_mean
+            self.channel_std = channel_std
 
+        # print(self.ct_mean)
+        self.ct = z_score_normalization(self.ct, self.ct_mean.item(), self.ct_std.item())
+        self.pet = z_score_normalization(self.pet, self.pet_mean.item(), self.pet_std.item())
+        self.fuse = z_score_normalization(self.fuse, self.fuse_mean.item(), self.fuse_std.item())
+        self.channel_3_img = z_score_normalization(self.channel_3_img, self.channel_mean.item(), self.channel_std.item())
+
+        
         if train:
             self.ct = transform(self.ct)
             self.pet = transform(self.pet)
@@ -85,7 +102,15 @@ class petct_dataset(Dataset):
             "pet_img": self.pet[idx],
             "fusion_img": self.fuse[idx],
             "channel_3_img": self.channel_3_img[idx],
-            "label": self.labels[idx]
+            "label": self.labels[idx],
+            "ct_mean": self.ct_mean,
+            "ct_std": self.ct_std,
+            "pet_mean": self.pet_mean,
+            "pet_std": self.pet_std,
+            "fuse_mean": self.fuse_mean,
+            "fuse_std": self.fuse_std,
+            "channel_mean": self.channel_mean,
+            "channel_std": self.channel_std
         } #ct_img, pet_img, label
 
 if __name__ == '__main__':

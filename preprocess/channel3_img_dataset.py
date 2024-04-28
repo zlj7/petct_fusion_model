@@ -26,23 +26,30 @@ data_transforms = transforms.Compose([
 MIN_ACC = 0.6774193548
 '''
 
-ct_mean = 55.18313217163086
-ct_std = 25.414644241333008
-pet_mean = 2.817307710647583
-pet_std = 8.828560829162598
-fuse_mean = 28.745954513549805
-fuse_std = 14.085247993469238
-channel3_mean = 28.915468215942383
-channel3_std = 27.64883804321289
+# ct_mean = 55.18313217163086
+# ct_std = 25.414644241333008
+# pet_mean = 2.817307710647583
+# pet_std = 8.828560829162598
+# fuse_mean = 28.745954513549805
+# fuse_std = 14.085247993469238
+# channel3_mean = 28.915468215942383
+# channel3_std = 27.64883804321289
 
 class petct_dataset(data_utils.Dataset):
 
-    def __init__(self, txt_path=None, dataset='petct_dataset', transform=None, fold=4, press=False, alpha=0.5, phase='all'):
+    def __init__(self, ct_mean, ct_std, pet_mean, pet_std, fuse_mean, fuse_std, channel_mean, channel_std, txt_path=None, dataset='petct_dataset', transform=None, alpha=0.5):
         self.data_list = []
         self.items = []
         self.transform = transform
-        self.press = press
         self.alpha = alpha
+        self.ct_mean = ct_mean
+        self.ct_std = ct_std
+        self.pet_mean = pet_mean
+        self.pet_std = pet_std
+        self.fuse_mean = fuse_mean
+        self.fuse_std = fuse_std
+        self.channel_mean = channel_mean
+        self.channel_std = channel_std
 
         # 打开文件
         with open(txt_path, "r") as file:
@@ -61,7 +68,9 @@ class petct_dataset(data_utils.Dataset):
         # 根据序列号，从xlsx中读取RECIST，进而获取分类标签
         df = pd.read_excel('/data3/share/Shanghai_Pulmonary/PET 2nd 脱敏/PET临床信息-睿医.xlsx') # 读取.xlsx文件
         recist = df.loc[df['影像组学序列号'] == int(name), 'RECIST'].values[0] # 查询RECIST
-        label = 1 if recist == 'CR' or recist == 'PR' else 0 # 分配标签
+        # label = 1 if recist == 'CR' or recist == 'PR' else 0 # 分配标签
+        recist_to_label = {'CR': 0, 'PR': 1, 'SD': 2, 'PD': 3}
+        label = recist_to_label.get(recist, 2)  # 如果recist的值不在字典中，返回2
 
         # CT数据及mask
         # ct_img = sitk.ReadImage(f"/data2/share/Shanghai_Pulmonary/PETCT ROI/CT_image_nii/{name}/{name}.nii.gz")
@@ -158,10 +167,10 @@ class petct_dataset(data_utils.Dataset):
 
 
         return {
-            "ct_img": (np.array(ct_img) - ct_mean) / ct_std,
-            "pet_img": (np.array(pet_img) - pet_mean) / pet_std,
-            "fusion_img": (fusion_img - fuse_mean) / fuse_std,
-            "channel_3_img": (channel_3_img - channel3_mean) / channel3_mean,
+            "ct_img": (np.array(ct_img) - self.ct_mean.item()) / self.ct_std.item(),
+            "pet_img": (np.array(pet_img) - self.pet_mean.item()) / self.pet_std.item(),
+            "fusion_img": (fusion_img - self.fuse_mean.item()) / self.fuse_std.item(),
+            "channel_3_img": (channel_3_img - self.channel_mean.item()) / self.channel_std.item(),
             "label": label
         } #ct_img, pet_img, label
 

@@ -39,20 +39,29 @@ class petct_dataset(data_utils.Dataset):
         with open(txt_path, "r") as file:
             # 逐行读取内容
             lines = file.readlines()
+            df = pd.read_excel('/data3/share/Shanghai_Pulmonary/PET 2nd 脱敏/PET临床信息-睿医-2024-4-24.xlsx') # 读取.xlsx文件
 
             # 遍历每行内容
             for line in lines:
+                print(line.rstrip())
+                if not os.path.exists(f'/data3/share/Shanghai_Pulmonary/sliced_img_30/ct/{line.rstrip()}'):
+                    continue
                 # 将文件名添加到列表中
-                self.items.append(line.rstrip())
+                recist = df.loc[df['影像组学序列号'] == int(line.rstrip()), 'RECIST'].values[0] # 查询RECIST
+                if recist is not None:
+                    self.items.append(line.rstrip())
 
         print('dataset=', dataset, '\nlen=', len(self.items))
 
     def __getitem__(self, idx):
         name = self.items[idx]
         # 根据序列号，从xlsx中读取RECIST，进而获取分类标签
-        df = pd.read_excel('/data3/share/Shanghai_Pulmonary/PET 2nd 脱敏/PET临床信息-睿医.xlsx') # 读取.xlsx文件
+        df = pd.read_excel('/data3/share/Shanghai_Pulmonary/PET 2nd 脱敏/PET临床信息-睿医-2024-4-24.xlsx') # 读取.xlsx文件
         recist = df.loc[df['影像组学序列号'] == int(name), 'RECIST'].values[0] # 查询RECIST
+        # recist_to_label = {'CR': 0, 'PR': 1, 'SD': 2, 'PD': 3}
+        # label = recist_to_label.get(recist, 2)  # 如果recist的值不在字典中，返回2
         label = 1 if recist == 'CR' or recist == 'PR' else 0 # 分配标签
+
 
         # CT数据及mask
         # ct_img = sitk.ReadImage(f"/data2/share/Shanghai_Pulmonary/PETCT ROI/CT_image_nii/{name}/{name}.nii.gz")
@@ -158,72 +167,73 @@ class petct_dataset(data_utils.Dataset):
         return len(self.items)
         
 if __name__ == '__main__':
-    dataset = petct_dataset('./train_all.txt', 'train_dataset')
-    train_load = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True, num_workers=4,
-                                             drop_last=True)
+    # for fold in range(1, 6):
+        dataset = petct_dataset(f'./train.txt', 'train_dataset')
+        train_load = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True, num_workers=4,
+                                                drop_last=True)
 
-    ct_list = []
-    pet_list = []
-    fusion_list = []
-    label_list_1 = []
-    for i, item in enumerate(train_load):
-        channel_3_img = item['channel_3_img'].squeeze(0)
-        ct_img = item['ct_img'].squeeze(0)
-        pet_img = item['pet_img'].squeeze(0)
-        fusion_img = item['fusion_img'].squeeze(0)
-        bs = len(channel_3_img)
-        label_value = item['label']
-        label = torch.full((bs,), label_value.item())
-        
+        ct_list = []
+        pet_list = []
+        fusion_list = []
+        label_list_1 = []
+        for i, item in enumerate(train_load):
+            channel_3_img = item['channel_3_img'].squeeze(0)
+            ct_img = item['ct_img'].squeeze(0)
+            pet_img = item['pet_img'].squeeze(0)
+            fusion_img = item['fusion_img'].squeeze(0)
+            bs = len(channel_3_img)
+            label_value = item['label']
+            label = torch.full((bs,), label_value.item())
+            
 
-        ct_list.append(np.array(ct_img))
-        pet_list.append(np.array(pet_img))
-        fusion_list.append(np.array(fusion_img))
-        label_list_1.append(np.array(label))
+            ct_list.append(np.array(ct_img))
+            pet_list.append(np.array(pet_img))
+            fusion_list.append(np.array(fusion_img))
+            label_list_1.append(np.array(label))
 
-    ct = np.concatenate(ct_list, axis=0)
-    pet = np.concatenate(pet_list, axis=0)
-    fusion = np.concatenate(fusion_list, axis=0)
-    label_list = np.concatenate(label_list_1, axis=0)
-    label_list = label_list.reshape((-1, 1))
+        ct = np.concatenate(ct_list, axis=0)
+        pet = np.concatenate(pet_list, axis=0)
+        fusion = np.concatenate(fusion_list, axis=0)
+        label_list = np.concatenate(label_list_1, axis=0)
+        label_list = label_list.reshape((-1, 1))
 
-    np.save('/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_ct_train_30_fold_all.npy',ct)
-    np.save('/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_pet_train_30_fold_all.npy',pet)
-    np.save('/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_fuse_train_30_fold_all.npy',fusion)
-    np.save('/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_label_train_30_fold_all.npy',label_list)
+        np.save(f'/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_ct_train_30.npy',ct)
+        np.save(f'/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_pet_train_30.npy',pet)
+        np.save(f'/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_fuse_train_30.npy',fusion)
+        np.save(f'/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_label_train_30.npy',label_list)
 
-    # test_dataset = petct_dataset('./test_1.txt', 'test_dataset')
-    # test_load = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=True, num_workers=4,
-    #                                          drop_last=True)
+        test_dataset = petct_dataset(f'./test.txt', 'test_dataset')
+        test_load = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=True, num_workers=4,
+                                                drop_last=True)
 
-    # ct_list = []
-    # pet_list = []
-    # fusion_list = []
-    # label_list_1 = []
-    # for i, item in enumerate(test_load):
-    #     channel_3_img = item['channel_3_img'].squeeze(0)
-    #     ct_img = item['ct_img'].squeeze(0)
-    #     pet_img = item['pet_img'].squeeze(0)
-    #     fusion_img = item['fusion_img'].squeeze(0)
-    #     bs = len(channel_3_img)
-    #     label_value = item['label']
-    #     label = torch.full((bs,), label_value.item())
+        ct_list = []
+        pet_list = []
+        fusion_list = []
+        label_list_1 = []
+        for i, item in enumerate(test_load):
+            channel_3_img = item['channel_3_img'].squeeze(0)
+            ct_img = item['ct_img'].squeeze(0)
+            pet_img = item['pet_img'].squeeze(0)
+            fusion_img = item['fusion_img'].squeeze(0)
+            bs = len(channel_3_img)
+            label_value = item['label']
+            label = torch.full((bs,), label_value.item())
 
-    #     ct_list.append(np.array(ct_img))
-    #     pet_list.append(np.array(pet_img))
-    #     fusion_list.append(np.array(fusion_img))
-    #     label_list_1.append(np.array(label))
+            ct_list.append(np.array(ct_img))
+            pet_list.append(np.array(pet_img))
+            fusion_list.append(np.array(fusion_img))
+            label_list_1.append(np.array(label))
 
-    # ct = np.concatenate(ct_list, axis=0)
-    # pet = np.concatenate(pet_list, axis=0)
-    # fusion = np.concatenate(fusion_list, axis=0)
-    # label_list = np.concatenate(label_list_1, axis=0)
-    # label_list = label_list.reshape((-1, 1))
-    # print(label_list.shape)
-    #     #print(channel_3_img.shape)
-    #     #print(label.item()) # torch.Size([1])
-    #     # break
-    # np.save('/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_ct_test_30_fold_1.npy',ct)
-    # np.save('/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_pet_test_30_fold_1.npy',pet)
-    # np.save('/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_fuse_test_30_fold_1.npy',fusion)
-    # np.save('/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_label_test_30_fold_1.npy',label_list)
+        ct = np.concatenate(ct_list, axis=0)
+        pet = np.concatenate(pet_list, axis=0)
+        fusion = np.concatenate(fusion_list, axis=0)
+        label_list = np.concatenate(label_list_1, axis=0)
+        label_list = label_list.reshape((-1, 1))
+        # print(label_list.shape)
+            #print(channel_3_img.shape)
+            #print(label.item()) # torch.Size([1])
+            # break
+        np.save(f'/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_ct_test_30.npy',ct)
+        np.save(f'/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_pet_test_30.npy',pet)
+        np.save(f'/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_fuse_test_30.npy',fusion)
+        np.save(f'/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_label_test_30.npy',label_list)

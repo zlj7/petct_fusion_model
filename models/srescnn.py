@@ -37,7 +37,7 @@ class ResBlock(nn.Module):
         return out
 
 class srescnn(nn.Module):
-    def __init__(self):
+    def __init__(self, num_classes):
         super(srescnn, self).__init__()
         self.conv1 = ConvBlock(3, 8, stride=2)
         self.res1 = ResBlock(8, 8)
@@ -55,7 +55,7 @@ class srescnn(nn.Module):
         self.res8 = ResBlock(128, 256)
         # ... add more layers as needed
         self.dropout = nn.Dropout(p=0.5)
-        self.fc = nn.Linear(256, 2)  # assuming output is binary classification
+        self.fc = nn.Linear(256, num_classes)  # assuming output is binary classification
 
     def forward(self, x):
         x_1 = self.conv1(x)
@@ -86,7 +86,7 @@ class srescnn(nn.Module):
         # x = torch.sigmoid(x)
         return x
 
-model = srescnn().cuda()
+model = srescnn(num_classes=4).cuda()
 data = torch.rand(1, 3, 64, 64).cuda()
 # print(model)
 out = model(data)
