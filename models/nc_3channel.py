@@ -206,9 +206,9 @@ res_channels = {'resnet50': [64, 256, 512, 1024, 2048],
                 'resnet18': [64, 64, 128, 256, 512]}
 
 
-class ThreeInOne(nn.Module):
+class pcfnet(nn.Module):
     def __init__(self, args):
-        super(ThreeInOne, self).__init__()
+        super(pcfnet, self).__init__()
         num_classes = args.num_classes
         channel_out = 4
         fuse_layer = 3
@@ -283,6 +283,6 @@ if __name__ == '__main__':
     args = Args()
     data = torch.rand(4, 3, 64, 64).cuda()
     tgt = torch.tensor([1, 1, 0, 0], dtype=torch.long).cuda()
-    net = ThreeInOne(args).cuda()
+    net = pcfnet(args).cuda()
     out = net(data)
     print(out)

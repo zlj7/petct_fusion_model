@@ -7,7 +7,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 import matplotlib
 matplotlib.use('Agg')
 
-from models.tiof import ThreeInOne,Args
+from models.pcfnet import pcfnet,Args
 # from models.ct_img import ThreeInOne,Args
 # from models.basemodel import ThreeInOne,Args
 from dataset.petct_dataset import petct_dataset
@@ -101,7 +101,7 @@ if __name__ == '__main__':
                                              drop_last=True)
 
     args = Args()
-    net = ThreeInOne(args).cuda()
+    net = pcfnet(args).cuda()
     optim = torch.optim.Adam(filter(lambda p: p.requires_grad, net.parameters()), lr=1e-4,
                                           betas=(0.9, 0.999), weight_decay=weight_decay)
     # 创建学习率调度器

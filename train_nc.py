@@ -12,13 +12,12 @@ import matplotlib
 matplotlib.use('Agg')
 
 
-# from models.tiof import ThreeInOne,Args
 # from models.ct_img import ThreeInOne,Args
 # from models.resnet_3channel import Resnet, Resnet_orin
-# from models.srescnn import srescnn
-from models.nc_3channel import ThreeInOne, Args
+from models.srescnn import srescnn
+from models.nc_3channel import pcfnet, Args
 from dataset.nc_dataset import petct_dataset
-from preprocess.channel3_img_dataset import petct_dataset as infer_dataset
+from dataset.patient_dataset import petct_dataset as infer_dataset
 import wandb
 # from tensorboardX import SummaryWriter
 
@@ -167,9 +166,12 @@ def valid_infer(net, val_dataloader, save_path):
     loss_t = 0.
     predict_proba_list = []
     tgt_list = []
+    names = []
     with torch.no_grad():
         for batch_idx, item in enumerate(val_dataloader):
             channel_3_img = item['channel_3_img'].squeeze(0).float().cuda()
+            name = item['patient']
+            names.append(name)
             bs = len(channel_3_img)
             label_value = item['label']
             label = torch.full((bs,), label_value.item())
@@ -189,6 +191,8 @@ def valid_infer(net, val_dataloader, save_path):
     auc = metrics.roc_auc_score(tgt_list, predict_proba_list, multi_class='ovo')  # 使用概率分数计算 AUC
     with open(f'{save_path}predict_proba_list.txt', 'w') as f:
         print(predict_proba_list, file=f)
+    with open(f'{save_path}names.txt', 'w') as f:
+        print(names, file=f)
     with open(f'{save_path}pred.txt', 'w') as f:
         print(pred, file=f)
     with open(f'{save_path}patient_auc.txt', 'a') as f:
@@ -212,25 +216,25 @@ def save_fig(save_path, curve, title):
 if __name__ == '__main__':
     fold = 5
     # 使用文件列表初始化数据集
-    train_ct_files = ['sh_pu_ct_train_30.npy']
-    train_pet_files = ['sh_pu_pet_train_30.npy']
-    train_fuse_files = ['sh_pu_fuse_train_30.npy']
-    train_labels_files = ['sh_pu_label_train_30.npy']
+    # train_ct_files = ['sh_pu_ct_train_30.npy']
+    # train_pet_files = ['sh_pu_pet_train_30.npy']
+    # train_fuse_files = ['sh_pu_fuse_train_30.npy']
+    # train_labels_files = ['sh_pu_label_train_30.npy']
 
-    test_ct_files = ['sh_pu_ct_test_30.npy']
-    test_pet_files = ['sh_pu_pet_test_30.npy']
-    test_fuse_files = ['sh_pu_fuse_test_30.npy']
-    test_labels_files = ['sh_pu_label_test_30.npy']
+    # test_ct_files = ['sh_pu_ct_test_30.npy']
+    # test_pet_files = ['sh_pu_pet_test_30.npy']
+    # test_fuse_files = ['sh_pu_fuse_test_30.npy']
+    # test_labels_files = ['sh_pu_label_test_30.npy']
 
-    # train_ct_files = [f'sh_pu_ct_train_50_fold_{fold}.npy']
-    # train_pet_files = [f'sh_pu_pet_train_50_fold_{fold}.npy']
-    # train_fuse_files = [f'sh_pu_fuse_train_50_fold_{fold}.npy']
-    # train_labels_files = [f'sh_pu_label_train_50_fold_{fold}.npy']
+    train_ct_files = [f'sh_pu_ct_train_all_fold_{fold}.npy']
+    train_pet_files = [f'sh_pu_pet_train_all_fold_{fold}.npy']
+    train_fuse_files = [f'sh_pu_fuse_train_all_fold_{fold}.npy']
+    train_labels_files = [f'sh_pu_label_train_all_fold_{fold}.npy']
 
-    # test_ct_files = [f'sh_pu_ct_test_50_fold_{fold}.npy']
-    # test_pet_files = [f'sh_pu_pet_test_50_fold_{fold}.npy']
-    # test_fuse_files = [f'sh_pu_fuse_test_50_fold_{fold}.npy']
-    # test_labels_files = [f'sh_pu_label_test_50_fold_{fold}.npy']
+    test_ct_files = [f'sh_pu_ct_test_all_fold_{fold}.npy']
+    test_pet_files = [f'sh_pu_pet_test_all_fold_{fold}.npy']
+    test_fuse_files = [f'sh_pu_fuse_test_all_fold_{fold}.npy']
+    test_labels_files = [f'sh_pu_label_test_all_fold_{fold}.npy']
 
     # train_ct_files = [f'sh_pu_ct_train_50_2cls_lungmate.npy']
     # train_pet_files = [f'sh_pu_pet_train_50_2cls_lungmate.npy']
@@ -286,6 +290,7 @@ if __name__ == '__main__':
         fuse_std = item['fuse_std']
         channel_mean = item['channel_mean']
         channel_std = item['channel_std']
+        # print(f'channel_mean: {channel_mean}')
         break
     
     test_dataset = petct_dataset(test_ct_files, test_pet_files, test_fuse_files, test_labels_files, ct_mean[0], ct_std[0], pet_mean[0], pet_std[0], fuse_mean[0], fuse_std[0], channel_mean[0], channel_std[0],train=False)
@@ -293,15 +298,16 @@ if __name__ == '__main__':
     test_load = torch.utils.data.DataLoader(test_dataset, batch_size=8, shuffle=True, num_workers=4,
                                                 drop_last=True)
     
-    infer_dataset = infer_dataset(ct_mean[0], ct_std[0], pet_mean[0], pet_std[0], fuse_mean[0], fuse_std[0], channel_mean[0], channel_std[0], f'preprocess/test_{fold}.txt', 'test_dataset', transform=None, alpha=0.5)
-    infer_load = torch.utils.data.DataLoader(infer_dataset, batch_size=1, shuffle=True, num_workers=4,
+    # patient_dataset = infer_dataset(f"/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_ct_test_all_patient_fold_{fold}.pkl",ct_mean[0], ct_std[0], pet_mean[0], pet_std[0], fuse_mean[0], fuse_std[0], channel_mean[0], channel_std[0])
+    patient_dataset = infer_dataset(f"/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_ct_test_patient.pkl",ct_mean[0], ct_std[0], pet_mean[0], pet_std[0], fuse_mean[0], fuse_std[0], channel_mean[0], channel_std[0])
+    
+    infer_load = torch.utils.data.DataLoader(patient_dataset, batch_size=1, shuffle=True, num_workers=4,
                                              drop_last=True)
 
-    # save_path = f"output_fold/tiof_50_2cls/fold_{fold}/"
-    save_path = f"output_fold/tiof_30_2cls/test/"
+    save_path = f"output_fold/tiof_all_2cls/fold_{fold}/"
     args = Args()
-    # net = srescnn(num_classes=4).cuda()
-    net = ThreeInOne(args).cuda()
+    # net = srescnn(num_classes=2).cuda()
+    net = pcfnet(args).cuda()
     # net = models.resnet50(pretrained=False)
     # # 然后重新定义最后一层
     # net.fc = nn.Linear(net.fc.in_features, 2)  
@@ -371,21 +377,21 @@ if __name__ == '__main__':
         save_fig(save_path, auc_curve, "auc")
         save_fig(save_path, l2_loss_curve, "l2_loss")
 
-        # test_acc, precision, recall, f1_score, auc, test_loss = valid_infer(net, infer_load, save_path)
-        # infer_test_acc_curve.append(test_acc)
-        # infer_precision_curve.append(precision)
-        # infer_recall_curve.append(recall)
-        # infer_f1_score_curve.append(f1_score)
-        # infer_auc_curve.append(auc)
-        # infer_test_loss_curve.append(test_loss)
+        test_acc, precision, recall, f1_score, auc, test_loss = valid_infer(net, infer_load, save_path)
+        infer_test_acc_curve.append(test_acc)
+        infer_precision_curve.append(precision)
+        infer_recall_curve.append(recall)
+        infer_f1_score_curve.append(f1_score)
+        infer_auc_curve.append(auc)
+        infer_test_loss_curve.append(test_loss)
 
-        # # 绘制曲线
-        # save_fig(save_path, infer_test_loss_curve, "patient_test_loss")
-        # save_fig(save_path, infer_test_acc_curve, "patient_test_accuracy")
-        # save_fig(save_path, infer_precision_curve, "patient_precision")
-        # save_fig(save_path, infer_recall_curve, "patient_recall")
-        # save_fig(save_path, infer_f1_score_curve, "patient_f1_score")
-        # save_fig(save_path, infer_auc_curve, "patient_auc")
+        # 绘制曲线
+        save_fig(save_path, infer_test_loss_curve, "patient_test_loss")
+        save_fig(save_path, infer_test_acc_curve, "patient_test_accuracy")
+        save_fig(save_path, infer_precision_curve, "patient_precision")
+        save_fig(save_path, infer_recall_curve, "patient_recall")
+        save_fig(save_path, infer_f1_score_curve, "patient_f1_score")
+        save_fig(save_path, infer_auc_curve, "patient_auc")
 
 
 

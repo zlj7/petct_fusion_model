@@ -2,7 +2,7 @@ import os
 import random
 
 # 指定路径
-path = '/data3/share/Shanghai_Pulmonary/sliced_img_30/ct/'
+path = '/data3/share/Shanghai_Pulmonary/sliced_img_no_filter/ct/'
 
 # 获取路径下的所有子文件夹
 folders = [f for f in os.listdir(path) if os.path.isdir(os.path.join(path, f))]
@@ -20,12 +20,12 @@ train_folders = folders[:train_size]
 test_folders = folders[train_size:]
 
 # 将训练集写入train.txt
-with open('train.txt', 'w') as f:
+with open('train_5_all.txt', 'w') as f:
     for folder in train_folders:
         f.write(folder + '\n')
 
 # 将测试集写入test.txt
-with open('test.txt', 'w') as f:
+with open('test_5_all.txt', 'w') as f:
     for folder in test_folders:
         f.write(folder + '\n')
 

@@ -14,6 +14,7 @@ import copy
 import re
 import skimage
 from torchvision import transforms
+import pickle
 
 # # 定义数据增强
 # data_transforms = transforms.Compose([
@@ -51,7 +52,7 @@ class petct_dataset(data_utils.Dataset):
                 if recist is not None:
                     self.items.append(line.rstrip())
 
-        # print('dataset=', dataset, '\nlen=', len(self.items))
+        print('dataset=', dataset, '\nlen=', len(self.items))
 
     def __getitem__(self, idx):
         name = self.items[idx]
@@ -159,7 +160,8 @@ class petct_dataset(data_utils.Dataset):
             "pet_img": np.array(pet_img),
             "fusion_img": fusion_img,
             "channel_3_img": channel_3_img,
-            "label": label
+            "label": label,
+            "name" : name
         } #ct_img, pet_img, label
 
 
@@ -167,73 +169,104 @@ class petct_dataset(data_utils.Dataset):
         return len(self.items)
         
 if __name__ == '__main__':
-    for fold in range(1, 6):
-        dataset = petct_dataset(f'./train_{fold}_all.txt', 'train_dataset')
-        train_load = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True, num_workers=4,
-                                                drop_last=True)
+    # for fold in range(1, 6):
+        # dataset = petct_dataset(f'./train.txt', 'train_dataset')
+        # train_load = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True, num_workers=4,
+        #                                         drop_last=True)
 
-        ct_list = []
-        pet_list = []
-        fusion_list = []
-        label_list_1 = []
-        for i, item in enumerate(train_load):
-            channel_3_img = item['channel_3_img'].squeeze(0)
-            ct_img = item['ct_img'].squeeze(0)
-            pet_img = item['pet_img'].squeeze(0)
-            fusion_img = item['fusion_img'].squeeze(0)
-            bs = len(channel_3_img)
-            label_value = item['label']
-            label = torch.full((bs,), label_value.item())
+        # # ct_list = []
+        # # pet_list = []
+        # # fusion_list = []
+        # # label_list_1 = []
+        # # names = []
+        # patient_data = {}
+
+        # for i, item in enumerate(train_load):
+        #     channel_3_img = item['channel_3_img'].squeeze(0)
+        #     ct_img = item['ct_img'].squeeze(0)
+        #     pet_img = item['pet_img'].squeeze(0)
+        #     fusion_img = item['fusion_img'].squeeze(0)
+        #     bs = len(channel_3_img)
+        #     label_value = item['label']
+        #     name = item['name']
+        #     label = torch.full((bs,), label_value.item())
             
 
-            ct_list.append(np.array(ct_img))
-            pet_list.append(np.array(pet_img))
-            fusion_list.append(np.array(fusion_img))
-            label_list_1.append(np.array(label))
+            # # ct_list.append(np.array(ct_img))
+            # # pet_list.append(np.array(pet_img))
+            # # fusion_list.append(np.array(fusion_img))
+            # # label_list_1.append(np.array(label))
+            # # names.append(name)
+            # patient_data[name] = {
+            #     "ct": ct_img,
+            #     "pet": pet_img,
+            #     "fusion": fusion_img,
+            #     "channel_3_img" : channel_3_img,
+            #     "label": label_value
+            # }
 
-        ct = np.concatenate(ct_list, axis=0)
-        pet = np.concatenate(pet_list, axis=0)
-        fusion = np.concatenate(fusion_list, axis=0)
-        label_list = np.concatenate(label_list_1, axis=0)
-        label_list = label_list.reshape((-1, 1))
 
-        np.save(f'/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_ct_train_all_fold_{fold}.npy',ct)
-        np.save(f'/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_pet_train_all_fold_{fold}.npy',pet)
-        np.save(f'/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_fuse_train_all_fold_{fold}.npy',fusion)
-        np.save(f'/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_label_train_all_fold_{fold}.npy',label_list)
+        # ct = np.concatenate(ct_list, axis=0)
+        # pet = np.concatenate(pet_list, axis=0)
+        # fusion = np.concatenate(fusion_list, axis=0)
+        # label_list = np.concatenate(label_list_1, axis=0)
+        # label_list = label_list.reshape((-1, 1))
 
-        test_dataset = petct_dataset(f'./test_{fold}_all.txt', 'test_dataset')
+        # np.save(f'/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_ct_train_30.npy',ct)
+        # np.save(f'/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_pet_train_30.npy',pet)
+        # np.save(f'/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_fuse_train_30.npy',fusion)
+        # np.save(f'/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_label_train_30.npy',label_list)
+
+        # test_dataset = petct_dataset(f'./test_{fold}_all.txt', 'test_dataset')
+        test_dataset = petct_dataset(f'./test.txt', 'test_dataset')
         test_load = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=True, num_workers=4,
                                                 drop_last=True)
 
-        ct_list = []
-        pet_list = []
-        fusion_list = []
-        label_list_1 = []
+        # ct_list = []
+        # pet_list = []
+        # fusion_list = []
+        # label_list_1 = []
+        patient_data = {}
         for i, item in enumerate(test_load):
             channel_3_img = item['channel_3_img'].squeeze(0)
             ct_img = item['ct_img'].squeeze(0)
+            # print(ct_img)
             pet_img = item['pet_img'].squeeze(0)
             fusion_img = item['fusion_img'].squeeze(0)
             bs = len(channel_3_img)
             label_value = item['label']
+            # print(label_value)
+            name = item['name'][0]
             label = torch.full((bs,), label_value.item())
+            
 
-            ct_list.append(np.array(ct_img))
-            pet_list.append(np.array(pet_img))
-            fusion_list.append(np.array(fusion_img))
-            label_list_1.append(np.array(label))
+            # ct_list.append(np.array(ct_img))
+            # pet_list.append(np.array(pet_img))
+            # fusion_list.append(np.array(fusion_img))
+            # label_list_1.append(np.array(label))
+            # names.append(name)
+            patient_data[name] = {
+                "ct": ct_img,
+                "pet": pet_img,
+                "fusion": fusion_img,
+                "channel_3_img" : channel_3_img,
+                "label": label_value
+            }
 
-        ct = np.concatenate(ct_list, axis=0)
-        pet = np.concatenate(pet_list, axis=0)
-        fusion = np.concatenate(fusion_list, axis=0)
-        label_list = np.concatenate(label_list_1, axis=0)
-        label_list = label_list.reshape((-1, 1))
+        # Save patient data
+        with open(f"/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_ct_test_patient.pkl", 'wb') as f:
+        # with open(f"/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_ct_test_all_patient_fold_{fold}.pkl", 'wb') as f:
+            pickle.dump(patient_data, f)
+        # ct = np.concatenate(ct_list, axis=0)
+        # pet = np.concatenate(pet_list, axis=0)
+        # fusion = np.concatenate(fusion_list, axis=0)
+        # label_list = np.concatenate(label_list_1, axis=0)
+        # label_list = label_list.reshape((-1, 1))
         # print(label_list.shape)
             #print(channel_3_img.shape)
             #print(label.item()) # torch.Size([1])
-            # break
-        np.save(f'/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_ct_test_all_fold_{fold}.npy',ct)
-        np.save(f'/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_pet_test_all_fold_{fold}.npy',pet)
-        np.save(f'/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_fuse_test_all_fold_{fold}.npy',fusion)
-        np.save(f'/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_label_test_all_fold_{fold}.npy',label_list)
+        #     # break
+        # np.save(f'/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_ct_test_30.npy',ct)
+        # np.save(f'/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_pet_test_30.npy',pet)
+        # np.save(f'/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_fuse_test_30.npy',fusion)
+        # np.save(f'/data3/share/Shanghai_Pulmonary/NCdata/sh_pu_label_test_30.npy',label_list)

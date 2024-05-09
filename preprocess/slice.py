@@ -17,7 +17,7 @@ def process_images(ct, ct_mask, pet, pet_mask, filename, save_path):
         pet_x, pet_y, pet_w, pet_h = cv2.boundingRect(pet_mask_slice)
 
         # if(ct_w * ct_h < 0.3 * ((ct_w + 20) * (ct_h +20)) or pet_w * pet_h < 0.3 * ((pet_w + 20) * (pet_h +20))):
-        if(ct_w * ct_h < 50 or pet_w * pet_h < 50):
+        if(ct_w * ct_h < 1 or pet_w * pet_h < 1):
             continue
 
         # 扩展矩形的宽高
@@ -73,7 +73,7 @@ for filename in os.listdir(path):
     # 获取文件名（不含后缀名）
     name = filename.split('.')#os.path.splitext(filename)
     # print(name[0])
-    if(name[0] == "295"):
+    if(name[0] == "295" or name[0] == "730" or name[0] == "738"):
         continue
     # CT数据及mask
     ct_img = sitk.ReadImage(f'/data3/share/Shanghai_Pulmonary/PET 2nd 脱敏_resample/ct/{name[0]}.nii.gz')
@@ -98,5 +98,5 @@ for filename in os.listdir(path):
     # print(f"pet_mask:{pet_mask.shape}")
 
     # print(type(ct_mask))
-    process_images(ct_img, ct_mask, pet_img, pet_mask, name[0], "/data3/share/Shanghai_Pulmonary/sliced_img_50pix/")
+    process_images(ct_img, ct_mask, pet_img, pet_mask, name[0], "/data3/share/Shanghai_Pulmonary/sliced_img_no_filter/")
     print(f"Finish processing {name[0]}!")
